@@ -1,0 +1,18 @@
+{
+  "servers": {
+    "pet-hospital": {
+      "command": "python",
+      "args": [
+        "-m",
+        "pet_hospital_mcp.server",
+        "--transport",
+        "stdio"
+      ],
+      "env": {
+        "PET_HOSPITAL_API_BASE_URL": "http://127.0.0.1:8080",
+        "MCP_TRANSPORT": "stdio"
+      },
+      "cwd": "${workspaceFolder}/pet-hospital-mcp"
+    }
+  }
+}
