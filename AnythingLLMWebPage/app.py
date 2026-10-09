@@ -51,7 +51,7 @@ def upload():
     slug = first_workspace_slug()
     r = requests.post(BASE_URL + "/api/v1/document/upload",
                       headers=HEADERS,
-                      files={"multiple_files": (f.filename, f.stream.read())},
+                      files={"file": (f.filename, f.stream.read())},
                       timeout=120)
     r.raise_for_status()
     location = r.json()["documents"][0]["location"]
