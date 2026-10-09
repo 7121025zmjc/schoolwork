@@ -44,14 +44,19 @@ def get_first_workspace_files():
     first = workspaces[0]
     slug = first["slug"]
     detail = api("/api/v1/workspace/" + slug)
-    ws = detail.get("workspace", detail)
-    docs = ws.get("documents", [])
+    ws_list = detail.get("workspace", [])
+    ws = ws_list[0] if isinstance(ws_list, list) and ws_list else ws_list
+    docs = ws.get("documents", []) if isinstance(ws, dict) else []
     lines = ["工作区：%s（%s）" % (first.get("name", slug), slug)]
     if not docs:
         lines.append("该工作区暂无文件")
     for d in docs:
-        lines.append("- 文件：%s，已解析：%s，位置：%s" % (
-            d.get("title", "?"), d.get("parsed", False), d.get("location", "?")))
+        title = d.get("filename", "?")
+        try:
+            title = json.loads(d.get("metadata", "{}")).get("title", title)
+        except Exception:
+            pass
+        lines.append("- 文件：%s" % title)
     return "\n".join(lines)
 
 
