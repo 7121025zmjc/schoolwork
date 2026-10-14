@@ -1,0 +1,9 @@
+# 密钥配置文件，包含 API key，必须排除
+config.ini
+
+# Python 虚拟环境
+venv/
+
+# Python 缓存
+__pycache__/
+*.pyc
