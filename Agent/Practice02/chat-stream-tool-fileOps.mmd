@@ -1,0 +1,145 @@
+%% chat-stream-tool-fileOps.py 代码架构图
+%% 多轮对话 + function call 本地文件操作工具组
+
+graph TD
+    subgraph ENTRY["① 程序入口层"]
+        A1["__main__ / main()"]
+        A2["KeyboardInterrupt 捕获"]
+        A1 --> A2
+    end
+
+    subgraph CFG["② 配置加载层"]
+        B1["load_config()<br/>读取 config.ini"]
+        B2["config.ini<br/>[LLM] api_key / base_url / model"]
+        B3["异常: FileNotFoundError / ValueError"]
+        B2 --> B1
+        B1 --> B3
+    end
+
+    subgraph CLIENT["③ LLM 客户端层"]
+        C1["OpenAI Client<br/>api_key / base_url / timeout=60"]
+        C2["client_kwargs['model']<br/>全局模型名缓存"]
+        C1 --> C2
+    end
+
+    subgraph LOOP["④ 多轮对话循环"]
+        D1["input() 读取用户输入"]
+        D2{"空输入 ?"}
+        D3{"exit / quit ?"}
+        D4["append user message"]
+        D5["trim_messages()<br/>窗口裁剪至 30 条"]
+        D6["chat_with_tools()"]
+        D7["append assistant reply"]
+        D8["print 回复"]
+        D1 --> D2
+        D2 -- 是 --> D1
+        D2 -- 否 --> D3
+        D3 -- 是 --> END1["退出 / 再见"]
+        D3 -- 否 --> D4 --> D5 --> D6 --> D7 --> D8 --> D1
+    end
+
+    subgraph FC["⑤ Function Call 核心引擎"]
+        E1["client.chat.completions.create<br/>messages + tools=TOOLS"]
+        E2{"msg.tool_calls ?"}
+        E3["构造 assistant 消息<br/>含 tool_calls 列表"]
+        E4["遍历 tool_calls<br/>json.loads(arguments)"]
+        E5["call_tool(name, args)<br/>工具分发"]
+        E6["append role=tool<br/>tool_call_id + result"]
+        E7["递归 chat_with_tools()<br/>把结果回传模型"]
+        E8["返回 msg.content"]
+        E1 --> E2
+        E2 -- 否 --> E8
+        E2 -- 是 --> E3 --> E4 --> E5 --> E6 --> E7 --> E1
+    end
+
+    subgraph REG["⑥ 工具注册表 TOOLS"]
+        F1["_params(properties, required)<br/>JSON Schema 构造"]
+        F2["10 个 tool 定义<br/>type=function + name/description/parameters"]
+        F1 --> F2
+    end
+
+    subgraph IMPL["⑦ 工具实现层（10 个本地文件操作）"]
+        subgraph READ_G["读取类"]
+            G1["get_cwd()<br/>获取当前工作目录"]
+            G2["list_directory()<br/>列出目录内容"]
+            G3["get_file_type()<br/>基于 FILE_TYPES 映射"]
+            G4["get_file_content()<br/>仅 UTF-8 纯文本"]
+        end
+        subgraph WRITE_G["写入类"]
+            G5["create_file()<br/>目录不存在则 makedirs"]
+            G6["edit_file()<br/>覆盖写入"]
+            G7["create_directory()"]
+        end
+        subgraph DELETE_G["删除/重命名类"]
+            G8["delete_directory()<br/>shutil.rmtree 递归"]
+            G9["delete_file()<br/>os.remove"]
+            G10["rename_file_or_dir()<br/>os.rename"]
+        end
+    end
+
+    subgraph DATA["⑧ 常量与数据结构"]
+        H1["BASE_DIR / CONFIG_FILE"]
+        H2["DEFAULT_TIMEOUT=60<br/>DEFAULT_BASE_URL / DEFAULT_MODEL"]
+        H3["MAX_MESSAGES=30<br/>EXIT_WORDS"]
+        H4["FILE_TYPES 扩展名映射表"]
+        H5["messages 会话历史列表"]
+    end
+
+    subgraph FS["⑨ 本地文件系统"]
+        I1[("os / shutil<br/>磁盘读写")]
+    end
+
+    A1 --> B1
+    B1 --> C1
+    A1 --> D1
+    D6 --> E1
+    E1 --> F2
+    E2 --> E3
+    E5 --> G1
+    E5 --> G2
+    E5 --> G3
+    E5 --> G4
+    E5 --> G5
+    E5 --> G6
+    E5 --> G7
+    E5 --> G8
+    E5 --> G9
+    E5 --> G10
+
+    G3 -.-> H4
+    G4 -.-> H4
+    D5 -.-> H3
+    C1 -.-> H2
+    B1 -.-> H1
+    D4 -.-> H5
+    D7 -.-> H5
+
+    G1 --> I1
+    G2 --> I1
+    G4 --> I1
+    G5 --> I1
+    G6 --> I1
+    G7 --> I1
+    G8 --> I1
+    G9 --> I1
+    G10 --> I1
+
+    classDef entry fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
+    classDef cfg fill:#fef3c7,stroke:#b45309,color:#78350f
+    classDef client fill:#e0e7ff,stroke:#4338ca,color:#312e81
+    classDef loop fill:#dcfce7,stroke:#15803d,color:#14532d
+    classDef fc fill:#fee2e2,stroke:#b91c1c,color:#7f1d1d
+    classDef reg fill:#f3e8ff,stroke:#7e22ce,color:#4c1d95
+    classDef impl fill:#f1f5f9,stroke:#475569,color:#1e293b
+    classDef data fill:#fce7f3,stroke:#be185d,color:#831843
+    classDef fs fill:#e5e7eb,stroke:#374151,color:#111827
+
+    class A1,A2 entry
+    class B1,B2,B3 cfg
+    class C1,C2 client
+    class D1,D2,D3,D4,D5,D6,D7,D8,END1 loop
+    class E1,E2,E3,E4,E5,E6,E7,E8 fc
+    class F1,F2 reg
+    class G1,G2,G3,G4,G5,G6,G7,G8,G9,G10 impl
+    class H1,H2,H3,H4,H5 data
+    class I1 fs
