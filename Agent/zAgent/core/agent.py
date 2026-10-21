@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-"""Agent 核心模块：封装 LLM 客户端与 function call 循环，供各 UI 层复用。"""
+"""Agent 核心模块：封装 LLM 客户端与 function call 循环，
+支持事件回调和流式输出，供各 UI 层复用。"""
 import json
 
 from openai import OpenAI
@@ -15,15 +16,23 @@ SYSTEM_PROMPT = ("你是一个乐于助人的 AI 助手。涉及本地文件操�
 class Agent:
     """LLM 智能体：管理会话上下文并执行 function call 循环。
 
-    UI 层只需创建 Agent 并调用 chat 方法，不感知工具细节。
+    UI 层创建 Agent 后调用 chat 方法即可，过程事件通过 on_event 回调通知：
+    thinking 开始请求模型；tool 工具调用完成；stream 流式内容增量；
+    done 本轮对话结束。
     """
 
-    def __init__(self, cfg, system_prompt=SYSTEM_PROMPT):
+    def __init__(self, cfg, system_prompt=SYSTEM_PROMPT, on_event=None):
         self.client = OpenAI(api_key=cfg["api_key"],
                              base_url=cfg["base_url"],
                              timeout=DEFAULT_TIMEOUT)
         self.model = cfg["model"]
         self.messages = [{"role": "system", "content": system_prompt}]
+        self.on_event = on_event
+
+    def _emit(self, event, **data):
+        """触发事件回调，UI 层借此感知对话过程。"""
+        if self.on_event:
+            self.on_event(event, data)
 
     def trim_messages(self):
         """消息条数超过上限时，截断最早的对话，保留系统提示。"""
@@ -36,33 +45,61 @@ class Agent:
         """发送用户消息，自动执行工具调用，返回最终文本回复。"""
         self.messages.append({"role": "user", "content": user_input})
         self.trim_messages()
-        reply = self._chat_with_tools()
+        self._emit("thinking")
+        reply = self._chat_stream()
         self.messages.append({"role": "assistant", "content": reply})
         self.trim_messages()
+        self._emit("done")
         return reply
 
-    def _chat_with_tools(self):
-        """function call 循环：请求模型，必要时执行工具并递归回传结果。"""
-        response = self.client.chat.completions.create(
-            model=self.model, messages=self.messages, tools=TOOLS)
-        msg = response.choices[0].message
+    def _chat_stream(self):
+        """流式 function call 循环：增量输出内容，必要时执行工具并递归。"""
+        stream = self.client.chat.completions.create(
+            model=self.model, messages=self.messages, tools=TOOLS,
+            stream=True)
+        content = []
+        tool_calls = {}
+        finish = None
+        for chunk in stream:
+            if not chunk.choices:
+                continue
+            choice = chunk.choices[0]
+            delta = choice.delta
+            if delta and delta.content:
+                content.append(delta.content)
+                self._emit("stream", text=delta.content)
+            if delta and delta.tool_calls:
+                for tc in delta.tool_calls:
+                    entry = tool_calls.setdefault(
+                        tc.index, {"id": "", "name": "", "arguments": ""})
+                    if tc.id:
+                        entry["id"] = tc.id
+                    if tc.function:
+                        if tc.function.name:
+                            entry["name"] += tc.function.name
+                        if tc.function.arguments:
+                            entry["arguments"] += tc.function.arguments
+            finish = choice.finish_reason
 
-        if msg.tool_calls:
+        if finish == "tool_calls":
             assistant_msg = {
                 "role": "assistant",
-                "content": msg.content,
+                "content": "".join(content) or None,
                 "tool_calls": [{
-                    "id": tc.id, "type": "function",
-                    "function": {"name": tc.function.name,
-                                 "arguments": tc.function.arguments},
-                } for tc in msg.tool_calls],
+                    "id": entry["id"], "type": "function",
+                    "function": {"name": entry["name"],
+                                 "arguments": entry["arguments"]},
+                } for _, entry in sorted(tool_calls.items())],
             }
             self.messages.append(assistant_msg)
-            for tc in msg.tool_calls:
-                args = json.loads(tc.function.arguments or "{}")
-                result = call_tool(tc.function.name, args)
+            for _, tc in sorted(tool_calls.items()):
+                args = json.loads(tc["arguments"] or "{}")
+                result = call_tool(tc["name"], args)
                 self.messages.append({"role": "tool",
-                                      "tool_call_id": tc.id,
+                                      "tool_call_id": tc["id"],
                                       "content": result})
-            return self._chat_with_tools()
-        return msg.content
+                self._emit("tool", name=tc["name"], args=args,
+                           result=result)
+            self._emit("thinking")
+            return self._chat_stream()
+        return "".join(content)
