@@ -12,10 +12,10 @@ from core.agent import Agent
 EXIT_WORDS = ("exit", "quit")
 
 BUBBLE_CSS = {
-    "you": ("bold #58a6ff", "#1c2c44", "#58a6ff"),
-    "ai": ("bold #3fb950", "#152b1e", "#3fb950"),
-    "tool": ("italic #d29922", "#2a2112", "#d29922"),
-    "err": ("bold #f85149", "#3d1513", "#f85149"),
+    "you": ("#1f6feb", "#e8f1ff", "#d5e6ff"),
+    "ai": ("#1a7f37", "#e9f6ec", "#d3f0da"),
+    "tool": ("#9a6700", "#fff8e5", "#f5e6b8"),
+    "err": ("#d1242f", "#fdebec", "#f6cdd0"),
 }
 
 
@@ -30,25 +30,26 @@ class ChatTUI(App):
 
     CSS = """
     Screen {
-        background: #0d1117;
+        background: #f6f8fa;
     }
     Header {
-        background: #161b22;
-        color: #e6edf3;
+        background: #ffffff;
+        color: #24292f;
+        border-bottom: solid #d0d7de;
     }
     #chat_col {
         width: 3fr;
-        border-right: solid #21262d;
-        background: #0d1117;
+        border-right: solid #d0d7de;
+        background: #f6f8fa;
     }
     #tools_col {
         width: 2fr;
-        background: #0f1218;
+        background: #ffffff;
     }
     #messages {
         height: 1fr;
         padding: 1 1;
-        background: #0d1117;
+        background: #f6f8fa;
     }
     Bubble {
         width: 100%;
@@ -56,26 +57,23 @@ class ChatTUI(App):
         margin-bottom: 1;
     }
     #tools_title {
-        background: #161b22;
-        color: #8b949e;
+        background: #f6f8fa;
+        color: #57606a;
         padding: 0 1;
         text-style: bold;
+        border-bottom: solid #d0d7de;
     }
     #tool_list {
         height: 1fr;
         padding: 0 1;
-        background: #0f1218;
-    }
-    ToolLine {
-        color: #d29922;
-        padding: 0 0 0 0;
-        margin-bottom: 1;
+        background: #ffffff;
     }
     #status {
         height: 3;
-        background: #10151c;
-        border-top: solid #21262d;
+        background: #ffffff;
+        border-top: solid #d0d7de;
         padding: 0 1;
+        color: #57606a;
     }
     #status_text {
         width: 1fr;
@@ -84,12 +82,12 @@ class ChatTUI(App):
         width: auto;
     }
     Input {
-        border: round #30363d;
-        background: #161b22;
-        color: #e6edf3;
+        border: solid #d0d7de;
+        background: #ffffff;
+        color: #24292f;
     }
     Input:focus {
-        border: round #3fb950;
+        border: solid #0969da;
     }
     """
 
@@ -173,10 +171,10 @@ class ChatTUI(App):
                        LoadingIndicator).display = loading
 
     async def _add_bubble(self, text, role):
-        style, bg, border = BUBBLE_CSS.get(role, BUBBLE_CSS["ai"])
+        color, bg, border = BUBBLE_CSS.get(role, BUBBLE_CSS["ai"])
         bubble = Bubble(text)
-        bubble.styles.border = ("round", border)
-        bubble.styles.color = border
+        bubble.styles.border = ("solid", border)
+        bubble.styles.color = color
         bubble.styles.background = bg
         await self.query_one("#messages", VerticalScroll).mount(bubble)
         self.query_one("#messages", VerticalScroll).scroll_end(
@@ -184,9 +182,9 @@ class ChatTUI(App):
 
     async def _add_tool_line(self, text):
         line = Static(text)
-        line.styles.color = "#d29922"
-        line.styles.background = "#1b1810"
-        line.styles.border = ("round", "#d29922")
+        line.styles.color = "#9a6700"
+        line.styles.background = "#fff8e5"
+        line.styles.border = ("solid", "#f5e6b8")
         await self.query_one("#tool_list", VerticalScroll).mount(line)
         self.query_one("#tool_list", VerticalScroll).scroll_end(
             animate=True)
