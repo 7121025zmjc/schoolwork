@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
-"""工具模块：10 个本地文件操作工具的注册表与实现，业务层不依赖 UI。"""
+"""工具模块：10 个本地文件操作工具 + getDate/isLeapYear 工具的注册表与实现，
+业务层不依赖 UI。"""
 import os
 import shutil
+import subprocess
 
 FILE_TYPES = {
     ".txt": "纯文本文件", ".md": "Markdown 文本文件", ".py": "Python 源文件",
@@ -12,6 +14,26 @@ FILE_TYPES = {
 }
 
 BINARY_EXTS = (".png", ".jpg", ".exe", ".pdf", ".docx", ".zip")
+
+
+def get_date():
+    """调用本地 date 命令获取当前日期和时间。"""
+    try:
+        date_str = subprocess.run(
+            ["cmd", "/c", "date", "/t"], capture_output=True, text=True,
+            timeout=10).stdout.strip()
+        time_str = subprocess.run(
+            ["cmd", "/c", "time", "/t"], capture_output=True, text=True,
+            timeout=10).stdout.strip()
+        return "当前日期：%s，当前时间：%s" % (date_str, time_str)
+    except Exception as e:
+        return "获取日期失败：%s" % e
+
+
+def is_leap_year(year):
+    """用 Python 代码判断指定年份是否为闰年。"""
+    year = int(year)
+    return (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0)
 
 
 def get_cwd():
@@ -182,6 +204,13 @@ TOOLS = [
             "old_path": {"type": "string", "description": "原路径"},
             "new_path": {"type": "string", "description": "新路径"}},
             ["old_path", "new_path"])}},
+    {"type": "function", "function": {"name": "getDate",
+        "description": "获取当前电脑的日期和时间",
+        "parameters": _params({}, [])}},
+    {"type": "function", "function": {"name": "isLeapYear",
+        "description": "判断指定年份是否为闰年",
+        "parameters": _params({"year": {"type": "integer",
+            "description": "要判断的年份"}}, ["year"])}},
 ]
 
 
@@ -208,4 +237,9 @@ def call_tool(name, args):
         return delete_file(args["path"])
     if name == "renameFileOrDir":
         return rename_file_or_dir(args["old_path"], args["new_path"])
+    if name == "getDate":
+        return get_date()
+    if name == "isLeapYear":
+        is_leap = is_leap_year(args.get("year"))
+        return "%s 年是闰年" % args["year"] if is_leap else "%s 年不是闰年" % args["year"]
     return "未知工具：%s" % name
