@@ -35,4 +35,6 @@ def load_config(path=CONFIG_FILE):
         "base_url": config.get("LLM", "base_url",
                                fallback=DEFAULT_BASE_URL).strip(),
         "model": config.get("LLM", "model", fallback=DEFAULT_MODEL).strip(),
+        "baidu_qianfan_api_key": config.get("search", "baidu_qianfan_api_key",
+                                            fallback="").strip(),
     }

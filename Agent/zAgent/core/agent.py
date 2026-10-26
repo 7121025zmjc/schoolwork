@@ -26,6 +26,7 @@ class Agent:
                              base_url=cfg["base_url"],
                              timeout=DEFAULT_TIMEOUT)
         self.model = cfg["model"]
+        self.search_api_key = cfg.get("baidu_qianfan_api_key", "")
         self.messages = [{"role": "system", "content": system_prompt}]
         self.on_event = on_event
 
@@ -94,7 +95,8 @@ class Agent:
             self.messages.append(assistant_msg)
             for _, tc in sorted(tool_calls.items()):
                 args = json.loads(tc["arguments"] or "{}")
-                result = call_tool(tc["name"], args)
+                result = call_tool(tc["name"], args,
+                                   search_api_key=self.search_api_key)
                 self.messages.append({"role": "tool",
                                       "tool_call_id": tc["id"],
                                       "content": result})

@@ -1,9 +1,15 @@
 # -*- coding: utf-8 -*-
-"""工具模块：10 个本地文件操作工具 + getDate/isLeapYear 工具的注册表与实现，
+"""工具模块：本地文件操作、日期、闰年、网络搜索工具的注册表与实现，
 业务层不依赖 UI。"""
+import json
 import os
 import shutil
 import subprocess
+import urllib.request
+import urllib.error
+
+SEARCH_URL = "https://qianfan.baidubce.com/v2/ai_search"
+SEARCH_TIMEOUT = 30
 
 FILE_TYPES = {
     ".txt": "纯文本文件", ".md": "Markdown 文本文件", ".py": "Python 源文件",
@@ -153,6 +159,55 @@ def rename_file_or_dir(old_path, new_path):
         return "重命名失败：%s" % e
 
 
+def search_web(query, api_key):
+    """调用百度千帆 AI 搜索，返回搜索摘要和参考来源。"""
+    if not api_key:
+        return "错误：未配置百度千帆 API Key，无法联网搜索。"
+    if not query:
+        return "错误：搜索关键词为空。"
+    payload = json.dumps({
+        "messages": [{"role": "user", "content": query}],
+        "search_source": "baidu_search_v2",
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        SEARCH_URL, data=payload, method="POST",
+        headers={"Content-Type": "application/json",
+                 "Authorization": "Bearer %s" % api_key})
+    try:
+        with urllib.request.urlopen(req, timeout=SEARCH_TIMEOUT) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        detail = ""
+        try:
+            detail = e.read().decode("utf-8")[:200]
+        except Exception:
+            pass
+        return "搜索请求失败：HTTP %d %s %s" % (e.code, e.reason, detail)
+    except urllib.error.URLError as e:
+        return "搜索请求失败：网络错误 %s" % e.reason
+    except Exception as e:
+        return "搜索请求失败：%s" % e
+
+    choices = data.get("choices") or []
+    if choices:
+        content = choices[0].get("message", {}).get("content", "")
+        if content:
+            return "网络搜索结果（关键词：%s）：\n%s" % (query, content)
+
+    references = data.get("references") or []
+    if not references:
+        return "搜索无结果。原始返回：%s" % str(data)[:300]
+    lines = []
+    for i, ref in enumerate(references[:5], 1):
+        title = ref.get("title", "无标题")
+        url = ref.get("url", "")
+        date = ref.get("date", "")
+        content = ref.get("content", "")[:200]
+        lines.append("%d. %s\n   时间：%s\n   来源：%s\n   摘要：%s"
+                     % (i, title, date, url, content))
+    return "网络搜索结果（关键词：%s）：\n%s" % (query, "\n\n".join(lines))
+
+
 def _params(properties, required):
     return {"type": "object", "properties": properties, "required": required}
 
@@ -211,10 +266,15 @@ TOOLS = [
         "description": "判断指定年份是否为闰年",
         "parameters": _params({"year": {"type": "integer",
             "description": "要判断的年份"}}, ["year"])}},
+    {"type": "function", "function": {"name": "searchWeb",
+        "description": "通过百度联网搜索获取互联网上的最新信息，"
+                       "适用于实时新闻、天气、日期、最新事件等本地无法回答的问题",
+        "parameters": _params({"query": {"type": "string",
+            "description": "搜索关键词或问题"}}, ["query"])}},
 ]
 
 
-def call_tool(name, args):
+def call_tool(name, args, search_api_key=""):
     """根据工具名分发到对应实现函数。"""
     if name == "getCWD":
         return get_cwd()
@@ -242,4 +302,6 @@ def call_tool(name, args):
     if name == "isLeapYear":
         is_leap = is_leap_year(args.get("year"))
         return "%s 年是闰年" % args["year"] if is_leap else "%s 年不是闰年" % args["year"]
+    if name == "searchWeb":
+        return search_web(args.get("query", ""), search_api_key)
     return "未知工具：%s" % name
