@@ -5,7 +5,8 @@ import threading
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual.widgets import Footer, Header, Input, LoadingIndicator, Static
+from textual.widgets import (Footer, Header, LoadingIndicator, Static,
+                            TextArea)
 
 from core.agent import Agent
 
@@ -81,12 +82,24 @@ class ChatTUI(App):
     #status_loading {
         width: auto;
     }
-    Input {
+    #input_row {
+        height: auto;
+        padding: 0 1;
+        background: #ffffff;
+        border-top: solid #d0d7de;
+    }
+    #input_loading {
+        width: auto;
+        height: 3;
+        display: none;
+    }
+    #input {
+        height: 3;
         border: solid #d0d7de;
         background: #ffffff;
         color: #24292f;
     }
-    Input:focus {
+    #input:focus {
         border: solid #0969da;
     }
     """
@@ -100,7 +113,11 @@ class ChatTUI(App):
         with Horizontal():
             with Vertical(id="chat_col"):
                 yield VerticalScroll(id="messages")
-                yield Input(placeholder="输入消息，exit 或 quit 退出")
+                with Horizontal(id="input_row"):
+                    yield LoadingIndicator(id="input_loading")
+                    yield TextArea(
+                        id="input",
+                        placeholder="输入消息，Shift+Enter 换行，Enter 发送，exit 退出")
             with Vertical(id="tools_col"):
                 yield Static("工具活动", id="tools_title")
                 yield VerticalScroll(id="tool_list")
@@ -115,11 +132,18 @@ class ChatTUI(App):
             "欢迎使用 zAgent，当前模型 %s\n可以问日期、闰年、文件操作" % model,
             "ai"))
 
-    def on_input_submitted(self, event):
-        text = event.value.strip()
+    def on_key(self, event):
+        """Enter 发送消息，Shift+Enter 在输入框内换行。"""
+        if event.key == "enter" and not event.shift:
+            event.stop()
+            self._submit()
+
+    def _submit(self):
+        text_area = self.query_one("#input", TextArea)
+        text = text_area.text.strip()
         if not text:
             return
-        event.input.value = ""
+        text_area.text = ""
         if text.lower() in EXIT_WORDS:
             self.exit()
             return
@@ -168,6 +192,8 @@ class ChatTUI(App):
     def _set_status(self, text, loading):
         self.query_one("#status_text", Static).update(text)
         self.query_one("#status_loading",
+                       LoadingIndicator).display = loading
+        self.query_one("#input_loading",
                        LoadingIndicator).display = loading
 
     async def _add_bubble(self, text, role):
