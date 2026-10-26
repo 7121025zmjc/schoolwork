@@ -33,6 +33,10 @@ class ChatInput(TextArea):
             event.stop()
             event.prevent_default()
             self.app._submit()
+        elif event.key == "shift+enter":
+            event.stop()
+            event.prevent_default()
+            self.insert("\n")
 
 
 class ChatTUI(App):
