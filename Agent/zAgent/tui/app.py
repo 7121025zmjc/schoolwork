@@ -33,8 +33,6 @@ class ChatInput(TextArea):
             event.stop()
             event.prevent_default()
             self.app._submit()
-        else:
-            super().on_key(event)
 
 
 class ChatTUI(App):
