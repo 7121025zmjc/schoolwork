@@ -208,6 +208,43 @@ def search_web(query, api_key):
     return "网络搜索结果（关键词：%s）：\n%s" % (query, "\n\n".join(lines))
 
 
+def fetch_web(url):
+    """用 curl 抓取网页，trafilatura 提取正文转 Markdown。"""
+    if not url:
+        return "错误：URL 为空。"
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+    try:
+        proc = subprocess.run(
+            ["curl", "-L", "--max-time", "20", "-s", "-A",
+             "Mozilla/5.0 (Windows NT 10.0; Win64; x64)", url],
+            capture_output=True, timeout=30)
+    except subprocess.TimeoutExpired:
+        return "错误：网页访问超时（30秒）。"
+    except FileNotFoundError:
+        return "错误：系统未找到 curl 程序。"
+    except Exception as e:
+        return "错误：curl 调用失败：%s" % e
+    if proc.returncode != 0:
+        return "错误：网页访问失败，curl 返回码 %d：%s" % (
+            proc.returncode, proc.stderr.decode("utf-8", "ignore")[:200])
+    html = proc.stdout.decode("utf-8", "ignore")
+    if not html.strip():
+        return "错误：网页内容为空。"
+    try:
+        import trafilatura
+        downloaded = trafilatura.extract(
+            html, output_format="markdown", include_links=True,
+            include_images=False, include_tables=True, favor_recall=True)
+    except Exception as e:
+        return "错误：网页正文解析失败：%s" % e
+    if not downloaded:
+        return "错误：无法从该网页提取正文，可能是图片页、登录页或反爬页面。"
+    if len(downloaded) > 4000:
+        downloaded = downloaded[:4000] + "\n...(内容过长已截断)"
+    return "网页 %s 的正文内容：\n%s" % (url, downloaded)
+
+
 def _params(properties, required):
     return {"type": "object", "properties": properties, "required": required}
 
@@ -271,6 +308,11 @@ TOOLS = [
                        "适用于实时新闻、天气、日期、最新事件等本地无法回答的问题",
         "parameters": _params({"query": {"type": "string",
             "description": "搜索关键词或问题"}}, ["query"])}},
+    {"type": "function", "function": {"name": "fetchWeb",
+        "description": "获取指定网页 URL 的正文内容，自动去除导航、广告、页脚等无关内容，"
+                       "返回 Markdown 格式正文。适用于已知具体网页链接需要读取内容时",
+        "parameters": _params({"url": {"type": "string",
+            "description": "要抓取的网页完整 URL"}}, ["url"])}},
 ]
 
 
@@ -304,4 +346,6 @@ def call_tool(name, args, search_api_key=""):
         return "%s 年是闰年" % args["year"] if is_leap else "%s 年不是闰年" % args["year"]
     if name == "searchWeb":
         return search_web(args.get("query", ""), search_api_key)
+    if name == "fetchWeb":
+        return fetch_web(args.get("url", ""))
     return "未知工具：%s" % name
