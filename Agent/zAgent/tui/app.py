@@ -4,6 +4,7 @@
 import threading
 
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import (Footer, Header, LoadingIndicator, Static,
                             TextArea)
@@ -22,6 +23,18 @@ BUBBLE_CSS = {
 
 class Bubble(Static):
     """消息气泡，按角色着色。"""
+
+
+class ChatInput(TextArea):
+    """多行输入框：Enter 发送，Shift+Enter 换行。"""
+
+    def on_key(self, event):
+        if event.key == "enter":
+            event.stop()
+            event.prevent_default()
+            self.app._submit()
+        else:
+            super().on_key(event)
 
 
 class ChatTUI(App):
@@ -115,7 +128,7 @@ class ChatTUI(App):
                 yield VerticalScroll(id="messages")
                 with Horizontal(id="input_row"):
                     yield LoadingIndicator(id="input_loading")
-                    yield TextArea(
+                    yield ChatInput(
                         id="input",
                         placeholder="输入消息，Shift+Enter 换行，Enter 发送，exit 退出")
             with Vertical(id="tools_col"):
@@ -132,11 +145,9 @@ class ChatTUI(App):
             "欢迎使用 zAgent，当前模型 %s\n可以问日期、闰年、文件操作" % model,
             "ai"))
 
-    def on_key(self, event):
-        """Enter 发送消息，Shift+Enter 在输入框内换行。"""
-        if event.key == "enter" and not event.shift:
-            event.stop()
-            self._submit()
+    def action_submit(self):
+        """Enter 发送，Shift+Enter 由 TextArea 默认行为处理为换行。"""
+        self._submit()
 
     def _submit(self):
         text_area = self.query_one("#input", TextArea)
