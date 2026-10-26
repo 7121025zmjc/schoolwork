@@ -26,14 +26,14 @@ class Bubble(Static):
 
 
 class ChatInput(TextArea):
-    """多行输入框：Enter 发送，Shift+Enter 换行。"""
+    """多行输入框：Enter 发送，Shift+Enter 换行（需 VS Code/Windows Terminal）。"""
 
     def on_key(self, event):
         if event.key == "enter":
             event.stop()
             event.prevent_default()
             self.app._submit()
-        elif event.key == "shift+enter":
+        elif event.key in ("shift+enter", "ctrl+j"):
             event.stop()
             event.prevent_default()
             self.insert("\n")
