@@ -245,6 +245,38 @@ def fetch_web(url):
     return "网页 %s 的正文内容：\n%s" % (url, downloaded)
 
 
+def run_cli(command, args):
+    """以当前用户权限执行系统命令，返回 stdout/stderr/exit code。"""
+    if not command:
+        return "错误：命令名为空。"
+    cmd = [command] + list(args or [])
+    try:
+        proc = subprocess.run(cmd, capture_output=True, timeout=30,
+                              shell=False)
+    except subprocess.TimeoutExpired:
+        return "错误：命令执行超时（30秒）。"
+    except FileNotFoundError:
+        return "错误：未找到命令 %s。" % command
+    except Exception as e:
+        return "错误：命令执行失败：%s" % e
+    out = proc.stdout.decode("utf-8", "ignore")
+    err = proc.stderr.decode("utf-8", "ignore")
+    truncated = False
+    if len(out) > 3000:
+        out = out[:3000] + "\n...(stdout 过长已截断)"
+        truncated = True
+    if len(err) > 1000:
+        err = err[:1000] + "\n...(stderr 过长已截断)"
+    result = "命令：%s\n退出码：%d" % (" ".join(cmd), proc.returncode)
+    if out:
+        result += "\n标准输出：\n" + out
+    if err:
+        result += "\n标准错误：\n" + err
+    if truncated:
+        result += "\n注意：输出过长已截断。"
+    return result
+
+
 def _params(properties, required):
     return {"type": "object", "properties": properties, "required": required}
 
@@ -313,6 +345,14 @@ TOOLS = [
                        "返回 Markdown 格式正文。适用于已知具体网页链接需要读取内容时",
         "parameters": _params({"url": {"type": "string",
             "description": "要抓取的网页完整 URL"}}, ["url"])}},
+    {"type": "function", "function": {"name": "RunCli",
+        "description": "执行本地命令行程序，返回标准输出、标准错误和退出码。"
+                       "用于运行系统命令、查看系统信息、运行脚本等",
+        "parameters": _params({
+            "command": {"type": "string", "description": "要执行的命令名，如 dir、python、git"},
+            "args": {"type": "array", "items": {"type": "string"},
+                     "description": "命令参数列表，可选"}},
+            ["command"])}},
 ]
 
 
@@ -348,4 +388,6 @@ def call_tool(name, args, search_api_key=""):
         return search_web(args.get("query", ""), search_api_key)
     if name == "fetchWeb":
         return fetch_web(args.get("url", ""))
+    if name == "RunCli":
+        return run_cli(args.get("command", ""), args.get("args", []))
     return "未知工具：%s" % name
