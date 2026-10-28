@@ -353,7 +353,18 @@ TOOLS = [
             "args": {"type": "array", "items": {"type": "string"},
                      "description": "命令参数列表，可选"}},
             ["command"])}},
+    {"type": "function", "function": {"name": "loadSkill",
+        "description": "加载某个 Skill 的完整说明文档。只给 name 时返回该 Skill 的 "
+                       "SKILL.md 全文；同时给 filename 时返回该 Skill 目录下的附加文件。"
+                       "当你需要了解某个技能的详细用法时调用此工具",
+        "parameters": _params({
+            "name": {"type": "string", "description": "Skill 的名称"},
+            "filename": {"type": "string", "description": "要加载的附加文件名，可选"}},
+            ["name"])}},
 ]
+
+
+from core.skill_loader import load_skill_body, load_skill_file
 
 
 def call_tool(name, args, search_api_key=""):
@@ -390,4 +401,10 @@ def call_tool(name, args, search_api_key=""):
         return fetch_web(args.get("url", ""))
     if name == "RunCli":
         return run_cli(args.get("command", ""), args.get("args", []))
+    if name == "loadSkill":
+        skill_name = args.get("name", "")
+        filename = args.get("filename", "")
+        if filename:
+            return load_skill_file(skill_name, filename)
+        return load_skill_body(skill_name)
     return "未知工具：%s" % name

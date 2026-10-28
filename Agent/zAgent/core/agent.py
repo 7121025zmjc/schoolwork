@@ -6,6 +6,7 @@ import json
 from openai import OpenAI
 
 from core.tools import TOOLS, call_tool
+from core.skill_loader import discover_skills, build_skills_prompt
 
 DEFAULT_TIMEOUT = 60
 MAX_MESSAGES = 30
@@ -27,7 +28,12 @@ class Agent:
                              timeout=DEFAULT_TIMEOUT)
         self.model = cfg["model"]
         self.search_api_key = cfg.get("baidu_qianfan_api_key", "")
-        self.messages = [{"role": "system", "content": system_prompt}]
+        self.skills = discover_skills()
+        skills_text = build_skills_prompt(self.skills)
+        full_prompt = system_prompt
+        if skills_text:
+            full_prompt = system_prompt + "\n\n" + skills_text
+        self.messages = [{"role": "system", "content": full_prompt}]
         self.on_event = on_event
 
     def _emit(self, event, **data):
