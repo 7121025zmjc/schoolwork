@@ -9,6 +9,7 @@ import os
 import re
 
 SKILLS_DIR = ".agents" + os.sep + "skills"
+EXTRA_SKILLS_DIRS = [r"D:\office\.agents\skills"]
 
 
 def _parse_frontmatter(text):
@@ -24,14 +25,8 @@ def _parse_frontmatter(text):
     return meta, m.group(2)
 
 
-def discover_skills(base_dir=None):
-    """扫描 skills 目录，返回 [{name, description, path, skill_md}]。
-
-    初始化阶段只读取 name 和 description，不读正文。
-    """
-    if base_dir is None:
-        base_dir = os.getcwd()
-    skills_root = os.path.join(base_dir, SKILLS_DIR)
+def _scan_skills_root(skills_root):
+    """扫描一个 skills 根目录，返回 Skill 列表。"""
     skills = []
     if not os.path.isdir(skills_root):
         return skills
@@ -39,7 +34,12 @@ def discover_skills(base_dir=None):
         skill_dir = os.path.join(skills_root, entry)
         skill_md = os.path.join(skill_dir, "SKILL.md")
         if not os.path.isfile(skill_md):
-            continue
+            # 兼容小写 skill.md
+            skill_md_lower = os.path.join(skill_dir, "skill.md")
+            if os.path.isfile(skill_md_lower):
+                skill_md = skill_md_lower
+            else:
+                continue
         try:
             with open(skill_md, "r", encoding="utf-8") as f:
                 text = f.read()
@@ -57,26 +57,67 @@ def discover_skills(base_dir=None):
     return skills
 
 
-def load_skill_body(name, base_dir=None):
-    """按名称加载某个 Skill 的 SKILL.md 全文。"""
+_CACHE = {}
+
+
+def discover_skills(base_dir=None):
+    """扫描项目目录和额外目录下的 skills，返回 Skill 列表。
+
+    初始化阶段只读取 name 和 description，不读正文。
+    """
     if base_dir is None:
         base_dir = os.getcwd()
-    skills_root = os.path.join(base_dir, SKILLS_DIR)
-    skill_dir = os.path.join(skills_root, name)
+    skills = []
+    seen = set()
+    # 先扫项目目录下的
+    for s in _scan_skills_root(os.path.join(base_dir, SKILLS_DIR)):
+        if s["name"] not in seen:
+            skills.append(s)
+            seen.add(s["name"])
+    # 再扫额外目录
+    for extra in EXTRA_SKILLS_DIRS:
+        for s in _scan_skills_root(extra):
+            if s["name"] not in seen:
+                skills.append(s)
+                seen.add(s["name"])
+    _CACHE.clear()
+    for s in skills:
+        _CACHE[s["name"]] = s["path"]
+    return skills
+
+
+def _find_skill_dir(name, base_dir=None):
+    """先按 name 在缓存里找路径，找不到再按文件夹名搜索。"""
+    if name in _CACHE:
+        return _CACHE[name]
+    if base_dir is None:
+        base_dir = os.getcwd()
+    search_roots = [os.path.join(base_dir, SKILLS_DIR)] + EXTRA_SKILLS_DIRS
+    for root in search_roots:
+        skill_dir = os.path.join(root, name)
+        if os.path.isdir(skill_dir):
+            return skill_dir
+    return None
+
+
+def load_skill_body(name, base_dir=None):
+    """按名称加载某个 Skill 的 SKILL.md 全文。"""
+    skill_dir = _find_skill_dir(name, base_dir)
+    if not skill_dir:
+        return "未找到 Skill: %s" % name
     skill_md = os.path.join(skill_dir, "SKILL.md")
     if not os.path.isfile(skill_md):
-        return "未找到 Skill: %s" % name
+        skill_md = os.path.join(skill_dir, "skill.md")
+    if not os.path.isfile(skill_md):
+        return "未找到 SKILL.md: %s" % name
     with open(skill_md, "r", encoding="utf-8") as f:
         return f.read()
 
 
 def load_skill_file(name, filename, base_dir=None):
     """在指定 Skill 目录内加载附加文件，不跳出 Skill 目录。"""
-    if base_dir is None:
-        base_dir = os.getcwd()
-    skills_root = os.path.join(base_dir, SKILLS_DIR)
-    skill_dir = os.path.join(skills_root, name)
-    if not os.path.isdir(skill_dir):
+    skill_dir = _find_skill_dir(name, base_dir)
+    if not skill_dir:
         return "未找到 Skill: %s" % name
     # 防止路径逃逸
     target = os.path.normpath(os.path.join(skill_dir, filename))
