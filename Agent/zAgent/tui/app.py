@@ -184,11 +184,13 @@ class ChatTUI(App):
             args = data.get("args") or {}
             result = str(data.get("result", ""))
             arg_str = "，".join("%s=%s" % (k, v) for k, v in args.items())
-            line = "%s\n  参数 %s\n  结果 %s" % (name, arg_str, result)
+            short_result = result[:150]
+            if len(result) > 150:
+                short_result += "..."
             self.run_worker(self._add_bubble("工具  " + name + "  " + arg_str,
                                              "tool"))
             self.run_worker(self._add_tool_line(
-                "%s\n参数 %s\n结果 %s" % (name, arg_str, result)))
+                "%s\n参数 %s\n结果 %s" % (name, arg_str, short_result)))
             self._set_status("正在执行工具 %s..." % name, loading=True)
         elif event_name == "stream":
             self._set_status("AI 生成中..." + data.get("text", ""),
